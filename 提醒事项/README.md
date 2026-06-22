@@ -79,18 +79,22 @@
 
 ---
 
-## 5. 执行通道（如何真正写进苹果设备）
+## 5. 执行通道：iCloud CalDAV 桥（已选定）
 
-Apple 提醒事项需要 `remindctl`（macOS）或 iCloud CalDAV 才能写入。
-**当前会话运行在远程 Linux 容器，没有这两个通道**，所以：
+用户已选 **iCloud CalDAV 桥**。脚本 `sync.py` 通过 iCloud CalDAV 直接把提醒
+写进苹果设备的「提醒事项 App」，跨设备同步，不依赖 Mac 开机。
 
-- 现状：我把每条日程整理进 `日程.md`，并给出**可直接复制运行的 `remindctl` 命令**，用户在 Mac 上一贴即同步。
-- 待选升级（见仓库讨论 / §6）：
-  - **A. Mac 本地跑 Hermes**：我直接执行 `remindctl`，全自动。
-  - **B. iCloud CalDAV 桥**：用 App 专用密码，让远程容器也能直接写入 iCloud 提醒（推荐，跨设备、可远程自动化）。
-  - **C. Mac 上定时拉取**：Mac 跑个小脚本，定时把 `日程.md` 里的新条目同步进 Reminders。
+- 配置见 `同步配置.md`（一次性：生成 App 专用密码 → 设两个环境变量）。
+- 凭据走环境变量 `ICLOUD_USERNAME` / `ICLOUD_APP_PASSWORD`，**绝不进仓库**。
+- 打通后，"安排" = 调用 `sync.py add ...` 直接落库 Apple 提醒事项 + 在 `日程.md` 登记。
 
-> 在通道打通前，"安排"= 写入 `日程.md` + 给出命令；通道打通后，"安排"= 直接落库 Apple 提醒事项。
+```bash
+python3 提醒事项/sync.py add --title "..." --list "工作-采访" \
+    --due "2026-07-02 10:00" --alarm "2026-07-02 09:00"
+```
+
+> 在用户完成 `同步配置.md` 的环境变量配置前，我先写 `日程.md` + 给命令；
+> 配置完成后即转为全自动写入。
 
 ---
 

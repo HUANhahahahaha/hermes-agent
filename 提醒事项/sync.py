@@ -10,10 +10,13 @@
   REMINDER_TZ           时区，默认 Asia/Shanghai
 
 用法：
-  python3 sync.py lists
+  python3 sync.py lists                      # 先看真实列表名
   python3 sync.py add --title "孙建亚老师 家前采时间确认（绿洲比华利花园931号楼）" \
-      --list "工作-采访" --due "2026-07-02 10:00" --alarm "2026-07-02 09:00"
-  python3 sync.py show --list "工作-采访"
+      --list "提醒事项" --due "2026-07-02 10:00" --alarm "2026-07-02 09:00"
+  python3 sync.py show --list "提醒事项"
+
+注意：iCloud 的 VALARM 只接受相对 DURATION 的 trigger（绝对 DATE-TIME 会 Forbidden），
+脚本已自动把 --alarm 的绝对时间换算成相对 --due 的偏移。
 """
 from __future__ import annotations
 
@@ -129,8 +132,12 @@ def cmd_add(args):
         alarm = Alarm()
         alarm.add("action", "DISPLAY")
         alarm.add("description", args.title)
+        # iCloud 只接受相对 DURATION 的 trigger，绝对 DATE-TIME 会被拒（Forbidden）。
+        # 把提醒时间换算成相对到期时间的偏移；无 due 时相对当前时间。
         if isinstance(when, datetime):
-            alarm.add("trigger", when)
+            base = due if args.due and isinstance(due, datetime) else datetime.now(_tz())
+            offset = when - base
+            alarm.add("trigger", offset)
         todo.add_component(alarm)
 
     container = ICal()
@@ -147,14 +154,24 @@ def cmd_add(args):
 def cmd_show(args):
     principal = _client().principal()
     cal = _pick_list(principal, args.list)
-    todos = cal.todos()
-    print(f"「{cal.name}」未完成提醒（{len(todos)}）：")
+    # iCloud + caldav 3.x 下 cal.todos() 会发带时间范围的 REPORT 触发 500；
+    # 用 search(todo=True) 取全部 VTODO，再在客户端过滤未完成项。
+    todos = cal.search(todo=True)
+    rows = []
     for t in todos:
-        inst = t.icalendar_instance.subcomponents[0]
-        summary = inst.get("summary", "")
-        due = inst.get("due")
-        due_s = f"  @ {due.dt}" if due else ""
-        print(f"  • {summary}{due_s}")
+        for inst in t.icalendar_instance.walk("VTODO"):
+            status = str(inst.get("status", "")).upper()
+            if status == "COMPLETED" or inst.get("completed"):
+                continue
+            summary = str(inst.get("summary", "")).strip()
+            if not summary:
+                continue
+            due = inst.get("due")
+            rows.append((due.dt if due else None, summary))
+    rows.sort(key=lambda r: (r[0] is None, str(r[0])))
+    print(f"「{cal.name}」未完成提醒（{len(rows)}）：")
+    for due, summary in rows:
+        print(f"  • {summary}" + (f"  @ {due}" if due else ""))
 
 
 def main(argv=None):

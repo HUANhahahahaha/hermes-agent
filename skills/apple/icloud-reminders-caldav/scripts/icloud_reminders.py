@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""提醒事项 → iCloud 提醒事项 同步桥（CalDAV）
+"""iCloud Reminders (CalDAV) — Apple 提醒事项 同步桥
 
 通过 iCloud CalDAV 直接把提醒写进苹果设备的「提醒事项 App」，跨设备同步，
 无需 Mac 开机。凭据从环境变量读取，绝不写进代码或仓库。
@@ -11,10 +11,11 @@
   REMINDER_TZ           时区，默认 Asia/Shanghai
 
 用法：
-  python3 sync.py lists                      # 先看真实列表名
-  python3 sync.py add --title "孙建亚老师 家前采时间确认（绿洲比华利花园931号楼）" \
-      --list "提醒事项" --due "2026-07-02 10:00" --alarm "2026-07-02 09:00"
-  python3 sync.py show --list "提醒事项"
+  python3 icloud_reminders.py lists                   # 先看真实列表名
+  python3 icloud_reminders.py add --title "买牛奶"     # 写入默认列表
+  python3 icloud_reminders.py add --title "孙建亚老师 家前采时间确认（绿洲比华利花园931号楼）" \
+      --due "2026-07-02 10:00" --alarm "2026-07-02 09:00"
+  python3 icloud_reminders.py show --list "ifoon@me.com"
 
 注意：iCloud 的 VALARM 只接受相对 DURATION 的 trigger（绝对 DATE-TIME 会 Forbidden），
 脚本已自动把 --alarm 的绝对时间换算成相对 --due 的偏移。

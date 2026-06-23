@@ -54,9 +54,10 @@
 
 ## 3. 列表归类（让提醒更直观）
 
-**默认写入列表：`ifoon@me.com`**（用户 2026-06-22 指定）。不传 `--list` 就进这里。
-账号下实际可写列表（`lists` 实测）：`提醒`、`huan.montoya@gmail.com`、
-`ifoon@me.com`、`提醒事项`、`Reminders ⚠️`。
+**默认写入列表：`收集桶`**（用户设备真实的默认 Inbox）。不传 `--list` 就进这里。
+真实列表名以 iMac 上 `remindctl list` 实际看到的为准（如「收集桶/项目/报销提醒…」）。
+
+> 注：旧 charter 写的默认列表 `ifoon@me.com` 是 CalDAV 旧分区里的名字，设备上根本没有，已废。
 
 下面的「分类标签」只用于在 `日程.md` 里组织阅读，**不是** Apple 里的真实 list 名：
 
@@ -83,25 +84,26 @@
 
 ---
 
-## 5. 执行通道：iCloud CalDAV 桥（已选定）
+## 5. 执行通道：iMac 锚节点 · remindctl（2026-06-22 晚改定）
 
-用户已选 **iCloud CalDAV 桥**。脚本 `sync.py` 通过 iCloud CalDAV 直接把提醒
-写进苹果设备的「提醒事项 App」，跨设备同步，不依赖 Mac 开机。
+> ⚠️ 旧的 **iCloud CalDAV 桥已弃用**：实测它登录到的是一个旧数据分区，
+> 写入/新建列表都**同步不到用户真实设备**（用户手机真实列表是「收集桶/项目/报销提醒…」，
+> 这些在 CalDAV 分区里根本不存在）。上一版"已验证"是 CalDAV 自己写自己读的假阳性。
 
-- 配置见 `同步配置.md`（一次性：生成 App 专用密码 → 设两个环境变量）。
-- 凭据走环境变量 `ICLOUD_USERNAME` / `ICLOUD_APP_PASSWORD`，**绝不进仓库**。
-- **已打通并验证**（2026-06-22）：装 `caldav icalendar` 后 `sync.py` 全链路可用。
-- "安排" = 调用 `sync.py add ...` 直接落库 Apple 提醒事项 + 在 `日程.md` 登记。
+**唯一可靠通道 = 在用户常开的 iMac 上跑 `remindctl`（EventKit）**，直接读写本机那份
+**已和手机同步的真库**，iCloud 再同步到所有设备。封装见 `anchor_node.py`，部署见 `锚节点-iMac.md`。
+
+- 前提：iMac 登录 Apple ID = `ifoon@me.com`，系统设置→iCloud→提醒事项 = 开。
+- 安装：`brew install steipete/tap/remindctl` → `remindctl authorize`。
+- **"安排" = 在 iMac 本地执行 `remindctl add ...` 落库** + 在 `日程.md` 登记。
+- 关键纪律：**必须在 macOS 本地执行**。云端会话碰不到设备（已证明），云端只做解析/草拟，
+  最终落库要由 iMac 节点完成。
 
 ```bash
-# 默认写入 ifoon@me.com，无需 --list：
-python3 提醒事项/sync.py add --title "..." \
+# 写进收集桶（默认）：
+remindctl add --title "..." --list 收集桶 \
     --due "2026-07-02 10:00" --alarm "2026-07-02 09:00"
 ```
-
-> 已封装成可部署 skill：`skills/apple/icloud-reminders-caldav/`，
-> 微信那台 Hermes 拉本分支即可用（脚本 `scripts/icloud_reminders.py` 与本目录
-> `sync.py` 同源）。详见该 skill 的 `SKILL.md`。
 
 ---
 

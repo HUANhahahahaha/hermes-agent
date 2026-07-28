@@ -1169,7 +1169,10 @@ class SessionDB:
                    cache_read_tokens = ?,
                    cache_write_tokens = ?,
                    reasoning_tokens = ?,
-                   estimated_cost_usd = COALESCE(?, 0),
+                   estimated_cost_usd = CASE
+                       WHEN ? IS NULL THEN estimated_cost_usd
+                       ELSE ?
+                   END,
                    actual_cost_usd = CASE
                        WHEN ? IS NULL THEN actual_cost_usd
                        ELSE ?
@@ -1190,7 +1193,10 @@ class SessionDB:
                    cache_read_tokens = cache_read_tokens + ?,
                    cache_write_tokens = cache_write_tokens + ?,
                    reasoning_tokens = reasoning_tokens + ?,
-                   estimated_cost_usd = COALESCE(estimated_cost_usd, 0) + COALESCE(?, 0),
+                   estimated_cost_usd = CASE
+                       WHEN ? IS NULL THEN estimated_cost_usd
+                       ELSE COALESCE(estimated_cost_usd, 0) + ?
+                   END,
                    actual_cost_usd = CASE
                        WHEN ? IS NULL THEN actual_cost_usd
                        ELSE COALESCE(actual_cost_usd, 0) + ?
@@ -1210,6 +1216,7 @@ class SessionDB:
             cache_read_tokens,
             cache_write_tokens,
             reasoning_tokens,
+            estimated_cost_usd,
             estimated_cost_usd,
             actual_cost_usd,
             actual_cost_usd,

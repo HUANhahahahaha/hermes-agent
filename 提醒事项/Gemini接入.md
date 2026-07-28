@@ -18,14 +18,26 @@ GEMINI_API_KEY=你的key
 ```
 （Hermes 也接受 `GOOGLE_API_KEY`。）
 
-### 3. 配置 provider
+### 3. 网络白名单 —— **实测不需要加**
+`generativelanguage.googleapis.com` 已在默认 cloud SDKs 白名单内。
+2026-07-28 实测：用无效 key 请求返回的是 Google 自己的 `API_KEY_INVALID`
+（而非代理的 `Host not in allowlist`），证明该域名本就可达。
+若日后真被拦，再去 Allowed domains 补这一行即可。
+
+### 4. 自检
+```bash
+python3 提醒事项/gemini_check.py          # 默认测 gemini-3.1-pro-preview
+GEMINI_CHECK_MODEL=gemini-3.6-flash python3 提醒事项/gemini_check.py
+```
+三步依次验证：凭据 → 网络 → 真实调用（打印回复与 token 用量）。
+任一步失败会直接告诉你是哪一环、怎么修。
+
+### 5. 配置 provider
 `~/.hermes/config.yaml`（或 `hermes` 交互式配置）：
 ```yaml
 provider: "gemini"
 model: "gemini-3.1-pro-preview"    # Google 当前最强
 ```
-
-> ⚠️ 网络白名单：若环境是 `Custom`，需放行 `generativelanguage.googleapis.com`。
 
 ## 二、模型选择
 

@@ -7,10 +7,7 @@ license: MIT
 platforms: [linux, macos, windows]
 metadata:
   hermes:
-    tags: [提醒事项, Reminders, 日程, 项目管理, iCloud, CalDAV, 微信]
-prerequisites:
-  commands: [remindctl]
-  platforms: [macos]
+    tags: [提醒事项, Reminders, 日程, 项目管理, 快捷指令, 微信]
 ---
 
 # 提醒事项大脑
@@ -71,23 +68,22 @@ prerequisites:
 **缺标题不可安排（必问）；缺日期要问；地点/人物可空。**
 有歧义（尤其是具体哪天）**先问，不要猜**。
 
-### 写入
+### 写入 —— 入队，等快捷指令来认领
 
-```bash
-remindctl add \
-  --title "孙建亚老师 家前采时间确认（绿洲比华利花园931号楼）" \
-  --list "提醒事项" \
-  --due "2026-07-02 10:00" \
-  --alarm "2026-07-02 09:00"
+把解析结果作为一条记录**入队到 `43.160.249.235:8787`**，字段：
+
+```json
+{"title": "孙建亚老师 家前采时间确认",
+ "due":   "2026-07-02 10:00",
+ "notes": "人物：孙建亚老师｜地点：绿洲比华利花园931号楼"}
 ```
 
-- **写完必须核对**：`remindctl today --json` 或 `remindctl list <列表名>`，
-  确认条目真的落地——「命令返回成功」不等于「用户看得到」，这正是
-  CalDAV 那次翻车的教训。
-- `--list` 用用户实际在用的列表；先 `remindctl list` 看现有列表名，不要硬编码。
-- **涉及外出／拍摄／见面的日程，默认加 `--alarm` 提前 1 小时**，并在回执里说明。
-- `--due` 是到期时间，`--alarm` 是通知触发时间，两者独立；用户要「提前提醒」
-  时必须显式给 `--alarm`。
+- 入队端点见 `提醒事项/架构.md`（微信 Clawbot 已在用同一条通道）。
+- **写入不是即时的**：快捷指令按自己的周期来 `/claim`，所以回执要说
+  「已排入队列，稍后会出现在你的『收集桶』」，不要说「已经在你手机上了」。
+- ⚠️ **绝不要 GET `/claim` 来验证** —— 那是认领语义，会把待写入条目吃掉，
+  用户反而收不到。要核对就问用户，或看队列服务自己的状态接口。
+- 备注里带上人物、地点等结构化信息，`notes` 字段会一并写进提醒。
 - 写完在 `提醒事项/日程.md` 追加一条登记，便于离线查阅与交接。
 
 ### 回执
@@ -131,20 +127,19 @@ hermes cron create "0 9 * * 1" \
 
 ## 四、每日简报
 
-数据源用 `remindctl`（不要用 `brief.py` 的 CalDAV 读取路径，那读的是废仓库）：
+⚠️ **读取端目前没有可用通道** —— CalDAV 是废仓库（读到的是幽灵数据），
+队列的 `/claim` 不能用来读（认领即消费）。所以简报暂时只能覆盖：
 
-```bash
-remindctl today --json      # 今日
-remindctl week  --json      # 本周
-remindctl overdue --json    # 已过期
-```
+- ✅ `提醒事项/日程.md`（本仓库登记的、经我们安排的日程）
+- ✅ `python3 提醒事项/scan.py`（项目停滞）
+- ❌ 用户手机上的全部提醒 —— 需要队列服务提供一个只读接口，或在 Mac 上用
+  `remindctl today --json`
 
-把三者汇总，再叠加 `python3 提醒事项/scan.py` 的停滞项目，输出：
-今日日程 ＋ 即将到期 ＋ 已过期 ＋ 停滞项目。挂定时任务：
+**不要用 `brief.py` 的 CalDAV 路径**，它报的是废仓库里的幽灵数据。
 
 ```bash
 hermes cron create "0 8 * * *" \
-  "跑 remindctl today --json 和 remindctl overdue --json，再跑 python3 提醒事项/scan.py，汇总成简报发我" \
+  "读 提醒事项/日程.md 并跑 python3 提醒事项/scan.py，汇总成简报发我" \
   --name "每日简报" --deliver weixin
 ```
 

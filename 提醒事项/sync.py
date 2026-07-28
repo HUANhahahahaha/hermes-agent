@@ -1,8 +1,24 @@
 #!/usr/bin/env python3
-"""提醒事项 → iCloud 提醒事项 同步桥（CalDAV）
+"""⛔️ 已作废 —— 不要使用。保留仅为记录教训。
 
-通过 iCloud CalDAV 直接把提醒写进苹果设备的「提醒事项 App」，跨设备同步，
-无需 Mac 开机。凭据从环境变量读取，绝不写进代码或仓库。
+**这条路是死的。** 苹果自 2019 年（iOS 13 / macOS Catalina）起把提醒事项
+迁入只有自家 App 能访问的私有仓库，不再经 iCloud CalDAV 共享；本脚本写入的
+是一个**已废弃的旧 CalDAV 仓库，用户在 iPhone 上永远看不到**。
+
+2026-07-28 对照实测：
+  · 经微信 Hermes（remindctl/EventKit）写入 → 手机可见，CalDAV 里查无此条
+  · 经本脚本（CalDAV）写入            → CalDAV 里存在，手机上看不到
+两个仓库完全隔离，互不同步。
+
+**正确做法：在 macOS 上用 `remindctl`**，见 `skills/apple/apple-reminders/`
+与 `skills/productivity/reminders-brain/`。
+
+教训：验证标准必须是「用户看得到」，而不是「API 返回成功」。
+
+--- 以下为原始文档，仅供参考 ---
+
+通过 iCloud CalDAV 把提醒写进苹果设备的「提醒事项 App」。
+凭据从环境变量读取，绝不写进代码或仓库。
 
 环境变量：
   ICLOUD_USERNAME       你的 Apple ID 邮箱

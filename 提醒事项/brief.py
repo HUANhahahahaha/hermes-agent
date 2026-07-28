@@ -1,5 +1,17 @@
 #!/usr/bin/env python3
-"""每日简报：今天该做什么、什么快到期、哪些项目停滞。
+"""⛔️ CalDAV 读取路径已作废 —— 用 remindctl 取数。
+
+本脚本经 iCloud CalDAV 读提醒事项，而苹果自 2019 年升级后 CalDAV 是一个
+用户在 iPhone 上看不到的**废弃旧仓库**（详见 sync.py 顶部）。因此它报出的
+待办可能全是幽灵数据。
+
+正确取数方式（macOS）：
+    remindctl today --json / remindctl overdue --json / remindctl week --json
+项目停滞部分（stale_projects）不依赖 CalDAV，仍然有效。
+
+--- 以下为原始文档 ---
+
+每日简报：今天该做什么、什么快到期、哪些项目停滞。
 
 用法：
     python3 提醒事项/brief.py            # 今日

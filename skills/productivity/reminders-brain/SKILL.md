@@ -9,8 +9,8 @@ metadata:
   hermes:
     tags: [提醒事项, Reminders, 日程, 项目管理, iCloud, CalDAV, 微信]
 prerequisites:
-  env: [ICLOUD_USERNAME, ICLOUD_APP_PASSWORD]
-  python: [caldav, icalendar]
+  commands: [remindctl]
+  platforms: [macos]
 ---
 
 # 提醒事项大脑
@@ -18,7 +18,21 @@ prerequisites:
 把用户随手发来的任意一段中文文字，变成他苹果设备「提醒事项 App」里的一条日程；
 并在此基础上纵览全局，主动提示、主动追问。
 
-写入走 iCloud CalDAV（`提醒事项/sync.py`），跨设备同步，不依赖 Mac 开机。
+## ⚠️ 只能用 remindctl，不要用 CalDAV
+
+**苹果 2019 年（iOS 13 / Catalina）把提醒事项迁进了只有自家 App 能访问的私有
+仓库，不再经由 iCloud CalDAV 共享。** 因此：
+
+| 通道 | 结果 |
+|---|---|
+| `remindctl`（EventKit，macOS） | ✅ 写进用户手机看得到的仓库 |
+| iCloud CalDAV | ❌ 写进一个**已废弃的旧仓库**，用户永远看不到 |
+
+2026-07-28 实测对照：经微信写入的提醒在手机上可见但 CalDAV 里查不到；
+经 CalDAV 写入的提醒在 CalDAV 里存在但手机上看不到。两个仓库完全隔离。
+
+**本技能一律走 `remindctl`。** 仓库里的 `提醒事项/sync.py`（CalDAV 版）已作废，
+仅作教训留存，不要调用。前置依赖见 `skills/apple/apple-reminders/`。
 
 ## 何时使用
 
@@ -55,16 +69,20 @@ prerequisites:
 ### 写入
 
 ```bash
-python3 提醒事项/sync.py add \
+remindctl add \
   --title "孙建亚老师 家前采时间确认（绿洲比华利花园931号楼）" \
-  --list "HERMES收件" \
+  --list "提醒事项" \
   --due "2026-07-02 10:00" \
-  --alarm "2026-07-02 09:00" \
-  --notes "人物：孙建亚老师｜地点：绿洲比华利花园931号楼"
+  --alarm "2026-07-02 09:00"
 ```
 
-- `--list` 默认写 `HERMES收件`（用户为此建的收件列表）。
+- **写完必须核对**：`remindctl today --json` 或 `remindctl list <列表名>`，
+  确认条目真的落地——「命令返回成功」不等于「用户看得到」，这正是
+  CalDAV 那次翻车的教训。
+- `--list` 用用户实际在用的列表；先 `remindctl list` 看现有列表名，不要硬编码。
 - **涉及外出／拍摄／见面的日程，默认加 `--alarm` 提前 1 小时**，并在回执里说明。
+- `--due` 是到期时间，`--alarm` 是通知触发时间，两者独立；用户要「提前提醒」
+  时必须显式给 `--alarm`。
 - 写完在 `提醒事项/日程.md` 追加一条登记，便于离线查阅与交接。
 
 ### 回执
@@ -108,17 +126,20 @@ hermes cron create "0 9 * * 1" \
 
 ## 四、每日简报
 
+数据源用 `remindctl`（不要用 `brief.py` 的 CalDAV 读取路径，那读的是废仓库）：
+
 ```bash
-python3 提醒事项/brief.py           # 今日简报
-python3 提醒事项/brief.py --week    # 本周
+remindctl today --json      # 今日
+remindctl week  --json      # 本周
+remindctl overdue --json    # 已过期
 ```
 
-输出：今日日程 ＋ 待确认事项 ＋ 即将到期 ＋ 停滞项目。
-挂定时任务：
+把三者汇总，再叠加 `python3 提醒事项/scan.py` 的停滞项目，输出：
+今日日程 ＋ 即将到期 ＋ 已过期 ＋ 停滞项目。挂定时任务：
 
 ```bash
 hermes cron create "0 8 * * *" \
-  "运行 python3 提醒事项/brief.py 并把结果发给我" \
+  "跑 remindctl today --json 和 remindctl overdue --json，再跑 python3 提醒事项/scan.py，汇总成简报发我" \
   --name "每日简报" --deliver weixin
 ```
 

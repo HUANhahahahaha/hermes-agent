@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -74,11 +75,20 @@ def parse(path: Path) -> tuple[list[Project], list[str]]:
 
 
 def add_reminder(title: str, notes: str, list_name: str) -> bool:
-    cmd = [sys.executable, str(ROOT / "sync.py"), "add",
-           "--title", title, "--list", list_name, "--notes", notes]
+    """用 remindctl 建提醒（macOS/EventKit）。
+
+    刻意不走 CalDAV：苹果升级后 CalDAV 是个用户看不到的废仓库，详见
+    ``sync.py`` 顶部说明。
+    """
+    if not shutil.which("remindctl"):
+        print("   ⚠️ 找不到 remindctl —— 本命令必须在 macOS 上运行。"
+              "安装：brew install steipete/tap/remindctl")
+        return False
+    cmd = ["remindctl", "add", "--title", title, "--list", list_name]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
-        print(f"   ⚠️ 写入提醒失败：{proc.stderr.strip().splitlines()[-1:] or proc.stdout}")
+        err = (proc.stderr or proc.stdout).strip().splitlines()
+        print(f"   ⚠️ 写入提醒失败：{err[-1] if err else '未知错误'}")
         return False
     return True
 

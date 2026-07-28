@@ -20,7 +20,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 try:
     from zoneinfo import ZoneInfo
@@ -130,7 +130,11 @@ def cmd_add(args):
         alarm.add("action", "DISPLAY")
         alarm.add("description", args.title)
         if isinstance(when, datetime):
-            alarm.add("trigger", when)
+            # iCloud rejects an absolute trigger unless it is UTC *and* carries
+            # an explicit VALUE=DATE-TIME parameter — a bare ``TRIGGER:...Z``
+            # (what icalendar emits by default) comes back 403 Forbidden.
+            utc = when.astimezone(timezone.utc)
+            alarm.add("trigger", utc, parameters={"VALUE": "DATE-TIME"})
         todo.add_component(alarm)
 
     container = ICal()

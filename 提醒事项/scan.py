@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""扫描 项目跟踪.md，找出停滞项目，可选地把追问写成 iCloud 提醒。
+"""扫描 项目跟踪.md，找出停滞项目，可选地把追问排进提醒队列。
 
 用法：
     python3 提醒事项/scan.py                # 只打印
@@ -14,8 +14,6 @@ from __future__ import annotations
 
 import argparse
 import re
-import shutil
-import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -75,29 +73,33 @@ def parse(path: Path) -> tuple[list[Project], list[str]]:
 
 
 def add_reminder(title: str, notes: str, list_name: str) -> bool:
-    """用 remindctl 建提醒（macOS/EventKit）。
+    """经提醒队列入队，并走完去重协议。
 
-    刻意不走 CalDAV：苹果升级后 CalDAV 是个用户看不到的废仓库，详见
-    ``sync.py`` 顶部说明。
+    刻意不走 CalDAV（废仓库，用户看不到），也不直接 remindctl
+    （需要 Mac 常开，正是现役架构要摆脱的前提）。详见 ``架构.md``。
     """
-    if not shutil.which("remindctl"):
-        print("   ⚠️ 找不到 remindctl —— 本命令必须在 macOS 上运行。"
-              "安装：brew install steipete/tap/remindctl")
+    try:
+        import queue_client as qc
+    except ImportError:
+        print("   ⚠️ 找不到 queue_client.py")
         return False
-    cmd = ["remindctl", "add", "--title", title, "--list", list_name]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        err = (proc.stderr or proc.stdout).strip().splitlines()
-        print(f"   ⚠️ 写入提醒失败：{err[-1] if err else '未知错误'}")
+    try:
+        verdict = qc.add(title, notes=notes, list_name=list_name)
+    except qc.QueueError as e:
+        print(f"   ⚠️ {e}")
         return False
-    return True
+    if verdict.should_push:
+        print(f"      → 已排入队列（{verdict.action}）")
+        return True
+    print(f"      → 跳过（{verdict.action}）：{verdict.reason}")
+    return False
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="扫描停滞项目")
     ap.add_argument("--days", type=int, default=7, help="停滞阈值天数（默认 7）")
     ap.add_argument("--remind", action="store_true", help="为停滞项目建提醒")
-    ap.add_argument("--list", default="HERMES收件", help="提醒写入的列表名")
+    ap.add_argument("--list", default="收集桶", help="提醒写入的列表名")
     args = ap.parse_args(argv)
 
     today = date.today()
@@ -133,8 +135,7 @@ def main(argv=None) -> int:
                 title = f"「{p.name}」已 {n} 天没动静了，卡在哪？"
                 notes = (f"上次更新：{p.updated}｜最近进展：{p.progress}"
                          f"｜原定下一步：{p.next_step}")
-                if add_reminder(title, notes, args.list):
-                    print(f"      → 已建提醒")
+                add_reminder(title, notes, args.list)  # 自带成功/跳过输出
             print()
 
     for s in skipped:

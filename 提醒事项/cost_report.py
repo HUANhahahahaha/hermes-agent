@@ -6,10 +6,23 @@
 未知被当成 0）。这个接口返回的是 Anthropic 自己的账单数字，与 Console
 的 Cost 页面同源，不需要维护任何价格。
 
+⛔️ **本脚本对当前账号不可用（2026-08-03 实测）**
+
+用户账号为个人账号，`platform.claude.com/settings/admin-keys` 返回
+「Page not found」，即无法创建 Admin API key —— 官方文档明写
+"The Admin API is unavailable for individual accounts"。
+
+要启用需先在 Console → Settings → Organization 建立组织。对「只想每天看一个
+花费数字」这个需求而言，建组织属于杀鸡用牛刀，**当前不推荐**。
+
+**当前实际采用的方案**：本地估算（`agent/usage_pricing.py` 定价表 +
+`hermes_state.py` 的未知/零区分修复），不需要 Admin key，但需部署到 VPS。
+人工查账仍可用 Console 的 Cost 页面（右上角可下载 CSV），以及 API keys
+页面上的 Cost 列。
+
+保留本脚本：账号哪天升级为组织即可直接使用。
+
 依赖：**Admin API key**（`sk-ant-admin01-...`，与普通 API key 不同）
-  创建：https://platform.claude.com/settings/admin-keys
-  ⚠️ Admin API **对个人账号不可用**，需先在
-     Console → Settings → Organization 建立组织。
 
 环境变量：
   ANTHROPIC_ADMIN_KEY   必填

@@ -662,6 +662,42 @@ def _to_int(value: Any) -> int:
         return 0
 
 
+def _infer_provider_from_model(model: str) -> Optional[str]:
+    """Guess the billing provider from an unambiguous model-name prefix.
+
+    `provider` is documented as optional ("telemetry/routing hints"), so plenty
+    of deployments run with it unset — just an API key and a model name.  With
+    no provider the route falls through to `unknown`, the official pricing table
+    is keyed by (provider, model) and is therefore never consulted, and every
+    session prices out as `unknown` no matter how complete the table is.  That
+    is how a daily spend report can read $0 forever while the pricing table
+    looks perfectly correct.
+
+    Only prefixes that identify exactly one vendor are listed.  An explicit
+    provider (including `custom`/`local`) is honoured ahead of this and never
+    reaches here.
+    """
+    name = (model or "").strip().lower()
+    if not name:
+        return None
+    # Bedrock model ids are dotted (anthropic.claude-…, amazon.nova-…) and must
+    # be checked before the bare claude- prefix.
+    if name.startswith(("anthropic.", "amazon.", "us.anthropic.", "eu.anthropic.")):
+        return "bedrock"
+    # "claude " covers display names ("Claude Sonnet 5") that reach us unslugged.
+    if name.startswith(("claude-", "claude ")):
+        return "anthropic"
+    if name.startswith(("gpt-", "gpt ", "chatgpt-")) or re.match(r"^o[1-9](-|$)", name):
+        return "openai"
+    if name.startswith(("gemini-", "gemini ")):
+        return "google"
+    if name.startswith("deepseek-"):
+        return "deepseek"
+    if name.startswith("minimax-"):
+        return "minimax"
+    return None
+
+
 def resolve_billing_route(
     model_name: str,
     provider: Optional[str] = None,
@@ -688,6 +724,13 @@ def resolve_billing_route(
         return BillingRoute(provider=provider_name, model=model.split("/")[-1], base_url=base_url or "", billing_mode="official_docs_snapshot")
     if provider_name in {"custom", "local"} or (base and "localhost" in base):
         return BillingRoute(provider=provider_name or "custom", model=model, base_url=base_url or "", billing_mode="unknown")
+    if not provider_name:
+        # No provider configured: fall back to the vendor implied by the model
+        # name.  A custom base_url still wins — get_pricing_entry queries the
+        # endpoint's /models first and only then consults the official table.
+        inferred = _infer_provider_from_model(model)
+        if inferred:
+            return BillingRoute(provider=inferred, model=model.split("/")[-1], base_url=base_url or "", billing_mode="official_docs_snapshot")
     return BillingRoute(provider=provider_name or "unknown", model=model.split("/")[-1] if model else "", base_url=base_url or "", billing_mode="unknown")
 
 

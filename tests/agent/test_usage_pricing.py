@@ -5,6 +5,7 @@ from agent.usage_pricing import (
     estimate_usage_cost,
     get_pricing_entry,
     normalize_usage,
+    resolve_billing_route,
 )
 
 
@@ -224,3 +225,62 @@ def test_deepseek_v4_pro_estimate_usage_cost():
     assert result.amount_usd is not None
     # 1M input × $1.74/M + 500K output × $3.48/M = $1.74 + $1.74 = $3.48
     assert float(result.amount_usd) == 3.48
+
+
+def test_missing_provider_is_inferred_from_the_model_name():
+    """`provider` is optional, and an unset one used to price everything at $0.
+
+    With no provider the route resolved to `unknown`, and the official pricing
+    table — keyed by (provider, model) — was never consulted.  Every session
+    came back `unknown`, which a daily spend report renders as zero.
+    """
+    usage = CanonicalUsage(input_tokens=10_000, output_tokens=2_000)
+
+    for model, expected_provider in (
+        ("claude-sonnet-5", "anthropic"),
+        ("Claude Sonnet 5", "anthropic"),          # unslugged display name
+        ("claude-opus-4.8", "anthropic"),          # dot notation
+        ("claude-sonnet-5-20260101", "anthropic"),  # dated snapshot
+        ("gpt-4o", "openai"),
+        ("o3", "openai"),
+        ("gemini-2.5-pro", "google"),
+        ("deepseek-chat", "deepseek"),
+        ("anthropic.claude-sonnet-4-6", "bedrock"),
+    ):
+        route = resolve_billing_route(model, provider=None)
+        assert route.provider == expected_provider, model
+        result = estimate_usage_cost(model, usage, provider=None)
+        assert result.status == "estimated", model
+        assert result.amount_usd is not None and result.amount_usd > 0, model
+
+
+def test_inference_matches_the_explicit_provider_it_stands_in_for():
+    usage = CanonicalUsage(
+        input_tokens=10_000,
+        output_tokens=2_000,
+        cache_read_tokens=50_000,
+        cache_write_tokens=20_000,
+    )
+    inferred = estimate_usage_cost("claude-sonnet-5", usage, provider=None)
+    explicit = estimate_usage_cost("claude-sonnet-5", usage, provider="anthropic")
+    assert inferred.amount_usd == explicit.amount_usd
+
+
+def test_explicit_custom_provider_is_not_overridden_by_inference():
+    """A custom deployment's prices are its own; guessing vendor rates there
+    would invent a number rather than admit we don't know one."""
+    usage = CanonicalUsage(input_tokens=10_000, output_tokens=2_000)
+    for provider in ("custom", "local"):
+        route = resolve_billing_route("claude-sonnet-5", provider=provider)
+        assert route.provider == provider
+        assert estimate_usage_cost("claude-sonnet-5", usage, provider=provider).status == "unknown"
+
+    route = resolve_billing_route("claude-sonnet-5", base_url="http://localhost:8080/v1")
+    assert route.provider == "custom"
+
+
+def test_unrecognized_model_still_reports_unknown_not_zero():
+    usage = CanonicalUsage(input_tokens=10_000, output_tokens=2_000)
+    result = estimate_usage_cost("llama-3-70b", usage, provider=None)
+    assert result.status == "unknown"
+    assert result.amount_usd is None

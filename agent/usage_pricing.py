@@ -698,14 +698,34 @@ def _normalize_anthropic_model_name(model: str) -> str:
       - Dot notation: claude-opus-4.7 → claude-opus-4-7
       - Short aliases: claude-opus-4.7 → claude-opus-4-7
       - Strips anthropic/ prefix if present
+      - Display names: "Claude Sonnet 5" → claude-sonnet-5
+      - Date-suffixed snapshots with no table entry: claude-sonnet-5-20260101
+        → claude-sonnet-5 (only as a fallback, see _lookup_official_docs_pricing)
+
+    An unrecognized name costs more than a slightly-wrong one: the caller
+    records it as "unknown", and unknown used to be persisted as $0 — which is
+    how the daily spend report silently read zero for a month.
     """
     name = model.lower().strip()
     if name.startswith("anthropic/"):
         name = name[len("anthropic/"):]
+    # Display form ("Claude Sonnet 5") → slug form
+    name = re.sub(r"\s+", "-", name)
     # Normalize dots to dashes in version numbers (e.g. 4.7 → 4-7, 4.6 → 4-6)
     # But preserve the rest of the name structure
     name = re.sub(r"(\d+)\.(\d+)", r"\1-\2", name)
     return name
+
+
+def _strip_date_suffix(model: str) -> str:
+    """Drop a trailing -YYYYMMDD snapshot suffix.
+
+    Dated entries that exist in the table (e.g. claude-opus-4-5-20251101) are
+    matched before this runs, so stripping only ever kicks in for snapshots we
+    don't carry — where falling back to the base model's price beats reporting
+    "unknown" and losing the spend entirely.
+    """
+    return re.sub(r"-\d{8}$", "", model)
 
 
 def _lookup_official_docs_pricing(route: BillingRoute) -> Optional[PricingEntry]:
@@ -714,11 +734,20 @@ def _lookup_official_docs_pricing(route: BillingRoute) -> Optional[PricingEntry]
     entry = _OFFICIAL_DOCS_PRICING.get((route.provider, model))
     if entry:
         return entry
-    # Try normalized name for Anthropic (handles dot-notation like opus-4.7)
+    # Try normalized name for Anthropic (handles dot-notation like opus-4.7,
+    # display names, and the anthropic/ prefix)
     if route.provider == "anthropic":
         normalized = _normalize_anthropic_model_name(model)
         if normalized != model:
             entry = _OFFICIAL_DOCS_PRICING.get((route.provider, normalized))
+            if entry:
+                return entry
+        # Last resort: an undated base entry for a snapshot we don't carry.
+        # Dated entries in the table already matched above, so this only fires
+        # for unknown snapshots — where the base price beats losing the spend.
+        base = _strip_date_suffix(normalized)
+        if base != normalized:
+            entry = _OFFICIAL_DOCS_PRICING.get((route.provider, base))
             if entry:
                 return entry
     return None

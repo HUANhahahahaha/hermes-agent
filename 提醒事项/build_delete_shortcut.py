@@ -18,6 +18,14 @@
 用法：
     python3 提醒事项/build_delete_shortcut.py [输出路径] [token]
     token 不传则写占位符（提交进仓库的永远是占位符，真值只进交付文件）。
+
+⚠️ **产出的文件不能直接导入** —— iOS 15 / macOS Monterey 起，苹果拒绝导入
+未签名的 .shortcut（弹「不支持导入未签名的快捷指令文件」，2026-08-04 实测）。
+必须先在任意一台 Mac 上签名：
+
+    shortcuts sign --mode anyone --input 未签名.shortcut --output 已签名.shortcut
+
+签名后的文件才能双击导入；导入后经 iCloud 自动同步到 iPhone。
 """
 from __future__ import annotations
 

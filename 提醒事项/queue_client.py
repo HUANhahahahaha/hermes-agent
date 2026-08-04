@@ -6,10 +6,16 @@
 
     GET  /pending    查待写队列        只读，安全
     GET  /snapshot   查设备提醒快照    只读，安全
-    POST /push       入队              写入
+    POST /push       入队              写入（``op`` 可为 add / delete）
+    POST /cancel     撤回未认领条目    写入
     GET  /claim      认领出队          ⛔️ 消费型，本模块**刻意不实现**
 
 鉴权：``X-Queue-Token`` 头，token 读自文件 ``~/.reminder-queue/token``。
+
+**增删改的边界**（2026-08-04 查明，见 ``架构.md``）：快捷指令只会「添加」，
+所以一条提醒一旦被认领落进手机，队列这边就再也碰不到它 —— 除非快捷指令
+本身增加「查找 + 移除」的一段。``delete`` / ``update`` 依赖那段新逻辑，
+在快捷指令更新之前调用会入队但永远不会被执行。
 
 只能在能访问队列服务的主机上运行（VPS 本机 ``127.0.0.1:8787``）。
 云端会话连不上，调用会明确报错而不是假装成功。
@@ -149,13 +155,19 @@ def classify(title: str, due: Optional[str],
 
 def push(title: str, *, due: Optional[str] = None,
          remind: Optional[str] = None, notes: str = "",
-         list_name: str = DEFAULT_LIST, replace: bool = False) -> dict:
+         list_name: str = DEFAULT_LIST, replace: bool = False,
+         op: str = "add") -> dict:
     """直接入队。**通常不要直接调用** —— 用 ``add`` 走完去重协议。"""
     body = {"title": title, "due": due, "remind": remind,
             "list": list_name, "notes": notes,
-            "source": SOURCE, "replace": replace}
+            "source": SOURCE, "replace": replace, "op": op}
     return _request("POST", "/push", {k: v for k, v in body.items()
                                       if v is not None}) or {}
+
+
+def cancel(title: str) -> dict:
+    """把还没被认领的条目撤回。只作用于队列，碰不到已落进手机的提醒。"""
+    return _request("POST", "/cancel", {"title": title, "source": SOURCE}) or {}
 
 
 def add(title: str, *, due: Optional[str] = None,
@@ -181,6 +193,124 @@ def add(title: str, *, due: Optional[str] = None,
         push(title, due=due, remind=remind, notes=notes,
              list_name=list_name, replace=verdict.replace)
     return verdict
+
+
+# ── 定位（删/改的前置步骤） ──────────────────────────────────────────────
+
+#: 删改要求比新增去重更有把握 —— 删错了用户手机上就少一条，且无法撤销。
+MATCH_THRESHOLD = 0.85
+
+
+@dataclass
+class Located:
+    """定位结果。``where`` ∈ pending / device / none。
+
+    ``candidates`` 在有歧义（多条命中）时列出全部，供调用方向用户确认。
+    ``exact_title`` 是**设备上的原始标题** —— 删除指令必须用它，
+    因为快捷指令那端是按标题精确匹配查找的，用户的转述匹配不上。
+    """
+    where: str
+    exact_title: Optional[str] = None
+    matched: Optional[dict] = None
+    candidates: list[dict] = None  # type: ignore[assignment]
+    similarity: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.candidates is None:
+            self.candidates = []
+
+    @property
+    def unambiguous(self) -> bool:
+        return self.where != "none" and len(self.candidates) == 1
+
+
+def _match_all(title: str, items: list[dict]) -> list[tuple[float, dict]]:
+    hits = []
+    for item in items:
+        other = str(item.get("title") or "").strip()
+        if not other:
+            continue
+        ratio = SequenceMatcher(None, title.strip(), other).ratio()
+        if ratio >= MATCH_THRESHOLD:
+            hits.append((ratio, item))
+    return sorted(hits, key=lambda x: -x[0])
+
+
+def locate(title: str) -> Located:
+    """按标题找出用户指的是哪一条。**先查队列，再查设备。**
+
+    顺序不能反：还躺在队列里的条目要用 ``cancel`` 撤回，已落进手机的才需要
+    下删除指令。搞反了会出现「删除指令找不到东西、新增指令照样把它加进去」。
+    """
+    hits = _match_all(title, pending())
+    if hits:
+        return Located("pending", str(hits[0][1].get("title") or ""),
+                       hits[0][1], [h[1] for h in hits], hits[0][0])
+
+    hits = _match_all(title, snapshot())
+    if hits:
+        return Located("device", str(hits[0][1].get("title") or ""),
+                       hits[0][1], [h[1] for h in hits], hits[0][0])
+
+    return Located("none")
+
+
+# ── 删除 / 修改 ─────────────────────────────────────────────────────────
+
+def delete(title: str, *, force: bool = False) -> Located:
+    """删除一条提醒。
+
+    安全规则（**不要放宽**）：
+      * 命中 0 条 → 什么都不做，如实回报「没找到」
+      * 命中 ≥2 条 → 什么都不做，把候选列出来让用户挑
+      * 命中 1 条 → 用**设备上的原始标题**下指令
+
+    ``force=True`` 只跳过「多条命中」的保护，仍然不会凭空删不存在的条目。
+    调用方**必须先把 ``exact_title`` 念给用户确认**再执行 —— 删除不可撤销。
+    """
+    found = locate(title)
+    if found.where == "none":
+        return found
+    if len(found.candidates) > 1 and not force:
+        return found
+
+    assert found.exact_title
+    if found.where == "pending":
+        cancel(found.exact_title)      # 还没出队，直接撤回，不必惊动手机
+    else:
+        push(found.exact_title, op="delete")
+    return found
+
+
+def update(title: str, *, due: Optional[str] = None,
+           remind: Optional[str] = None, notes: str = "",
+           new_title: Optional[str] = None,
+           list_name: str = DEFAULT_LIST, force: bool = False) -> Located:
+    """修改一条提醒（改期、改标题、改备注）。
+
+    设备上没有「原地编辑」这条路 —— 快捷指令能做的只有查找、移除、添加。
+    所以改 = **先删后加**，靠删除段跑在新增段前面来保证顺序。
+
+    还在队列里的条目走 ``replace``（原有机制），不必绕这一圈。
+    """
+    found = locate(title)
+    if found.where == "none":
+        return found
+    if len(found.candidates) > 1 and not force:
+        return found
+
+    assert found.exact_title and found.matched
+    final_title = new_title or found.exact_title
+
+    if found.where == "pending":
+        push(final_title, due=due, remind=remind, notes=notes,
+             list_name=list_name, replace=True)
+        return found
+
+    push(found.exact_title, op="delete")
+    push(final_title, due=due, remind=remind, notes=notes,
+         list_name=list_name)
+    return found
 
 
 if __name__ == "__main__":

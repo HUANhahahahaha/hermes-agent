@@ -35,8 +35,8 @@ import uuid
 from pathlib import Path
 
 HOST = "43.160.249.235:8787"
-LIST_NAME = "提醒事项"  # ✅ 2026-08-04 用户展开第 7 步截图确认：默认列表「提醒事项」。
-                        # 不是文档原先写的「收集桶」—— list 字段被手机端忽略，见 架构.md。
+LIST_NAME = "收集桶"  # ✅ 2026-08-04 从用户导出的真实 worker plist 读出（WFCalendarDescriptor）。
+                      # 截图上那个蓝色「提醒事项」是 App 名，不是列表名 —— 我一度据此改错过。
 TOKEN_PLACEHOLDER = "在这里粘贴你的队列 token"
 
 # 固定 UUID：重新生成同一份文件时保持稳定，便于 diff。
@@ -56,6 +56,30 @@ def _output(uuid_: str, name: str) -> dict:
     return {
         "Value": {"OutputName": name, "OutputUUID": uuid_, "Type": "ActionOutput"},
         "WFSerializationType": "WFTextTokenAttachment",
+    }
+
+
+def _text_var(uuid_: str, name: str) -> dict:
+    """把某一步的输出嵌进**文本字段**（标题、备注、筛选条件的值）。
+
+    ⚠️ 与 `_output()` 不是一回事，用错了变量**不会绑定**且不报错：
+    - **整值字段**（`WFInput`、循环的输入）→ `_output()`，`WFTextTokenAttachment`
+    - **文本字段**（`WFCalendarItemTitle`、`WFCalendarItemNotes`、筛选值）→ 本函数，
+      `WFTextTokenString` + `attachmentsByRange`，字符串里放一个 U+FFFC 占位符
+
+    2026-08-04 实测教训：整份文件的文本字段都误用了 `_output()`，结果
+    「将 字典值 添加到 提醒事项（日期）」渲染成「将 提醒事项 添加到 提醒事项
+    （不提醒）」—— 标题和日期都是空的，动作静默失效。
+    """
+    return {
+        "Value": {
+            "string": "￼",
+            "attachmentsByRange": {
+                "{0, 1}": {"Type": "ActionOutput",
+                           "OutputName": name, "OutputUUID": uuid_},
+            },
+        },
+        "WFSerializationType": "WFTextTokenString",
     }
 
 
@@ -146,7 +170,7 @@ def build(token: str = TOKEN_PLACEHOLDER) -> dict:
                                 "Operator": 4,               # 4 = 是
                                 "Removable": True,
                                 "Unit": 0,
-                                "Values": {"Name": _output(U_ITEM, "Dictionary Value")},
+                                "Values": {"Name": _text_var(U_ITEM, "Dictionary Value")},
                             },
                         ],
                     },

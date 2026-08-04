@@ -42,7 +42,8 @@ import sys
 from pathlib import Path
 
 from build_delete_shortcut import (  # noqa: E402
-    HOST, LIST_NAME, TOKEN_PLACEHOLDER, _comment, _output, _text, _var,
+    HOST, LIST_NAME, TOKEN_PLACEHOLDER, _comment, _output, _text,
+    _text_var, _var,
 )
 
 # 固定 UUID，重新生成时保持稳定
@@ -140,8 +141,8 @@ def build(token: str = TOKEN_PLACEHOLDER) -> dict:
                             {"Class": "WFRemindersContentItem",
                              "Property": "Name", "Operator": 4,
                              "Removable": True, "Unit": 0,
-                             "Values": {"Name": _output(U_DEL_TITLE,
-                                                        "Dictionary Value")}},
+                             "Values": {"Name": _text_var(U_DEL_TITLE,
+                                                          "Dictionary Value")}},
                         ],
                     },
                     "WFSerializationType": "WFContentPredicateTableTemplate",
@@ -192,11 +193,11 @@ def build(token: str = TOKEN_PLACEHOLDER) -> dict:
         {   # 添加提醒
             "WFWorkflowActionIdentifier": "is.workflow.actions.addnewreminder",
             "WFWorkflowActionParameters": {
-                "WFCalendarItemTitle": _output(U_ADD_TITLE, "Dictionary Value"),
+                "WFCalendarItemTitle": _text_var(U_ADD_TITLE, "Dictionary Value"),
                 "WFCalendarItemCalendar": LIST_NAME,
                 "WFAlertEnabled": True,
                 "WFAlertCustomTime": _output(U_ADD_DATE, "Date"),
-                "WFCalendarItemNotes": _output(U_ADD_NOTES, "Dictionary Value"),
+                "WFCalendarItemNotes": _text_var(U_ADD_NOTES, "Dictionary Value"),
             },
         },
         {   # 重复（结束）

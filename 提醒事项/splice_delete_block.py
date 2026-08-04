@@ -164,24 +164,33 @@ def delete_block(claim_url: str, token: str, list_name: str) -> list[dict]:
                 "GroupingIdentifier": G_DEL_IF,
                 "WFControlFlowMode": 0,
                 "WFCondition": 100,          # 100 = 有任何值
-                "WFInput": _attach(U_DEL_TITLE, "Dictionary Value"),
+                # 条件动作的输入必须再包一层 {Type:"Variable", Variable:…}，
+                # 直接给 attachment 是静默失效（2026-08-04 格式调研证实）
+                "WFInput": {"Type": "Variable",
+                            "Variable": _attach(U_DEL_TITLE, "Dictionary Value")},
             },
         },
         {
             "WFWorkflowActionIdentifier": "is.workflow.actions.filter.reminders",
             "WFWorkflowActionParameters": {
                 "UUID": U_DEL_FIND,
+                # 行内 Values 按**值类型**键入（String/Enumeration/…），不是按属性名；
+                # 列表是 Enumeration + WFStringSubstitutableState；标题属性现代系统叫
+                # Title（旧系统叫 Name）。三点均为 2026-08-04 格式调研结论。
                 "WFContentItemFilter": {
                     "Value": {
                         "WFActionParameterFilterPrefix": 1,   # 全部满足
+                        "WFContentPredicateBoundedDate": False,
                         "WFActionParameterFilterTemplates": [
                             {"Class": "WFRemindersContentItem", "Property": "List",
-                             "Operator": 4, "Removable": True, "Unit": 0,
-                             "Values": {"List": list_name}},
-                            {"Class": "WFRemindersContentItem", "Property": "Name",
-                             "Operator": 4, "Removable": True, "Unit": 0,
-                             "Values": {"Name": _text_var(U_DEL_TITLE,
-                                                          "Dictionary Value")}},
+                             "Operator": 4, "Removable": True,
+                             "Values": {"Enumeration": {
+                                 "Value": list_name,
+                                 "WFSerializationType": "WFStringSubstitutableState"}}},
+                            {"Class": "WFRemindersContentItem", "Property": "Title",
+                             "Operator": 4, "Removable": True,
+                             "Values": {"String": _text_var(U_DEL_TITLE,
+                                                            "Dictionary Value")}},
                         ],
                     },
                     "WFSerializationType": "WFContentPredicateTableTemplate",
@@ -191,7 +200,10 @@ def delete_block(claim_url: str, token: str, list_name: str) -> list[dict]:
         {
             "WFWorkflowActionIdentifier": "is.workflow.actions.removereminders",
             "WFWorkflowActionParameters": {
-                "WFInput": _attach(U_DEL_FIND, "Reminders"),
+                # 键名是 WFInputReminders（同族：Remove Events 用 WFInputEvents）。
+                # 用 WFInput 则查找结果根本传不进来 —— 静默失效。
+                # 另：此动作运行时**必弹系统确认框**，无参数可关，属预期行为。
+                "WFInputReminders": _attach(U_DEL_FIND, "Reminders"),
             },
         },
         {

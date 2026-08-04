@@ -26,8 +26,8 @@ import uuid
 from pathlib import Path
 
 HOST = "43.160.249.235:8787"
-LIST_NAME = "收集桶"  # ⚠️ 待确认：worker 截图显示实际写死的是「提醒事项」（默认列表）。
-                      # 队列里的 list 字段被手机端忽略 —— 见 架构.md。填错则筛选恒不命中、静默失效。
+LIST_NAME = "提醒事项"  # ✅ 2026-08-04 用户展开第 7 步截图确认：默认列表「提醒事项」。
+                        # 不是文档原先写的「收集桶」—— list 字段被手机端忽略，见 架构.md。
 TOKEN_PLACEHOLDER = "在这里粘贴你的队列 token"
 
 # 固定 UUID：重新生成同一份文件时保持稳定，便于 diff。

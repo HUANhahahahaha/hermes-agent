@@ -16,7 +16,8 @@
 认不出的**路径**返回 404，这一段空转，无害。所以本快捷指令可以先于服务器安装。
 
 用法：
-    python3 提醒事项/build_delete_shortcut.py [输出路径]
+    python3 提醒事项/build_delete_shortcut.py [输出路径] [token]
+    token 不传则写占位符（提交进仓库的永远是占位符，真值只进交付文件）。
 """
 from __future__ import annotations
 
@@ -65,14 +66,13 @@ def _comment(text: str) -> dict:
     }
 
 
-def build() -> dict:
+def build(token: str = TOKEN_PLACEHOLDER) -> dict:
     actions = [
         _comment(
             "提醒事项 · 删除\n\n"
-            "① 先把下面「获取URL内容」里的 X-Queue-Token 换成真值 —— "
-            "打开你现有那个新增用的快捷指令，从它的标头里复制。\n"
-            "② 建一条「自动化」定时触发本快捷指令，间隔与新增那条保持一致。\n"
-            "③ 服务器还没加 /claim-delete 时，这里会 404，本指令空转，无害。"
+            "不要单独给它建自动化 —— 在「同步提醒队列」最顶上加一个"
+            "「运行快捷指令」动作指向它即可，5 条触发器都不用动。\n"
+            "服务器还没有 /claim-delete 时它会报错；报错只说明服务端还没就绪。"
         ),
         # ① 认领待删清单
         {
@@ -80,7 +80,7 @@ def build() -> dict:
             "WFWorkflowActionParameters": {
                 "UUID": U_URL,
                 "WFURL": f"http://{HOST}/claim-delete",
-                "WFHTTPMethod": "GET",
+                "WFHTTPMethod": "POST",  # 镜像生产 worker（2026-08-04 截图确认为 POST）
                 "ShowHeaders": True,
                 "WFHTTPHeaders": {
                     "Value": {
@@ -88,7 +88,7 @@ def build() -> dict:
                             {
                                 "WFItemType": 0,
                                 "WFKey": _text("X-Queue-Token"),
-                                "WFValue": _text(TOKEN_PLACEHOLDER),
+                                "WFValue": _text(token),
                             }
                         ]
                     },
@@ -193,7 +193,8 @@ def build() -> dict:
 
 def main(argv: list[str]) -> int:
     out = Path(argv[1]) if len(argv) > 1 else Path("提醒事项-删除.shortcut")
-    data = plistlib.dumps(build(), fmt=plistlib.FMT_XML)
+    token = argv[2] if len(argv) > 2 else TOKEN_PLACEHOLDER
+    data = plistlib.dumps(build(token), fmt=plistlib.FMT_XML)
     out.write_bytes(data)
     # 回读校验：写出来的东西必须还能解析回同样的动作序列
     back = plistlib.loads(out.read_bytes())

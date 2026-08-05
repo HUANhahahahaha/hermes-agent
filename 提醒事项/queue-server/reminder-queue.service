@@ -1,0 +1,12 @@
+[Unit]
+Description=Reminder write queue for Apple Reminders consumers
+After=network.target
+
+[Service]
+User=ubuntu
+ExecStart=/usr/bin/python3 /home/ubuntu/.reminder-queue/queue_server.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

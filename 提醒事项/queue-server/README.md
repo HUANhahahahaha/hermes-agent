@@ -53,6 +53,7 @@ WantedBy=multi-user.target
 | `/push` | POST | 入队。body: `{title, due?, remind?, list?, notes?, source?, replace?, op?}`。`op` 默认 `"add"`，可选 `"delete"`（删除条目只需要 `title`，进独立队列）。缺省行为与历史版本完全一致。 |
 | `/pending` | GET | 查 add 队列里未认领的条目，只读不消费。 |
 | `/claim` | GET/POST | 认领并出队。不带参数 = 只认领 add 队列（**历史行为，务必保持**，防止老快捷指令把删除指令当新增写入）。`?op=delete` 单独认领 delete 队列。**消费型端点，调试/查询绝对不要调用它**，一读就把用户待收的提醒/待删指令吃掉。 |
+| `/claim-delete` | GET | `/claim?op=delete` 的路径别名，供不便拼接查询参数的消费端使用；只认领 delete 队列。它同样是**消费型端点**。 |
 | `/cancel` | POST | body: `{title}`。撤掉 add 队列里**尚未被认领**的同名条目，返回 `{"ok": true, "cancelled": N}`。只作用于队列，碰不到已经落进手机的提醒。 |
 | `/ack` | POST | body: `{id, result}`，逐条回执用（Mac 消费脚本用）。 |
 | `/snapshot` | GET/POST | Mac 端上传/查询设备上已有提醒的快照。 |
@@ -61,7 +62,7 @@ WantedBy=multi-user.target
 
 ## 安全边界
 
-- `/claim` 出队即消费，**任何调试/排障场景都不要调用它**，否则会把用户
+- `/claim`、`/claim-delete` 出队即消费，**任何调试/排障场景都不要调用它们**，否则会把用户
   真正待收的提醒/待删指令吃掉。查询只用 `/pending` 和 `/snapshot`。
 - delete 队列与 add 队列物理隔离，任何改动都不能让两者混放，否则老版本
   快捷指令会把删除指令误写成一条新提醒。

@@ -22,6 +22,7 @@ Endpoints:
                              不带参数时只返回 add 队列的条目 —— 这是历史行为,
                              必须保持,否则老版本快捷指令会把删除指令当成新提醒写入。
   GET  /claim?op=delete    → 认领并出队全部待删条目(来自独立的 delete 队列)。
+  GET  /claim-delete       → 上述删除队列消费端点的路径别名。
   POST /cancel              → body: {title} → 撤掉 add 队列里"尚未被认领"的同名条目,
                              返回 {"ok": true, "cancelled": N}。只作用于队列,
                              碰不到已经落进手机的提醒。
@@ -129,6 +130,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._deny(401, "bad token")
         path, _, query = self.path.partition("?")
         params = dict(p.split("=", 1) if "=" in p else (p, "") for p in query.split("&") if p)
+        if path == "/claim-delete":
+            return self._claim({"op": "delete"})
         if path == "/claim":
             return self._claim(params)
         with _LOCK:

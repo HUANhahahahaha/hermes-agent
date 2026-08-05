@@ -66,15 +66,16 @@
   拼接。** 快捷指令的「获取URL内容」不把 HTTP 错误码当失败,所有循环体都要
   「如果 title 有任何值」保险丝。
 
-## 当前状态(2026-08-04 交接)
+## 当前状态(2026-08-05)
 
 - ✅ 服务端:`op=delete` 独立队列、`/cancel`、非法 op 400,Clawbot 已部署验证。
 - ✅ 手机:「同步提醒队列v3」已交付(删除段+用户原 9 动作逐字节保留)。
 - ✅ Clawbot 已布置:更新自身改期/删除逻辑(见 `queue_client.py`)、修 notes
   换行转义、修 HYROX 条目。
-- ⏳ 遗留:①队列服务源码在 VPS 本地分支 `queue-server-update`,因无 GitHub
-  凭证推不上来 —— 让 Clawbot 把文件内容贴出来,由有仓库权限的一侧提交
-  (**不要给 VPS 发 GitHub token**,那台机器已是单点);
-  ②`/claim-delete` 路径别名(非阻塞,与①一起办);
-  ③千问 3.8 Max 发布监控 cron(用户要求有消息通知,挂在 VPS 的
+- ✅ 遗留①已完成:队列服务真实源码已从 VPS `queue-server-update`
+  (`cbfbd4b1cd95142a78fccacd219a1dcfaadf262c`)导出、脱敏审计并提交到
+  `提醒事项/queue-server/`(仓库提交 `e56f7ec41726ceecdee5ac67d136e3dc2978d389`);
+  未向 VPS 提供 GitHub token。
+- ⏳ 遗留②:`/claim-delete` 路径别名(非阻塞)。
+- ⏳ 遗留③:千问 3.8 Max 发布监控 cron(用户要求有消息通知,挂在 VPS 的
   `hermes cron` 上做)。

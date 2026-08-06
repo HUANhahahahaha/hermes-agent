@@ -80,6 +80,18 @@ class CostResult:
 _UTC_NOW = lambda: datetime.now(timezone.utc)
 
 
+_ANTHROPIC_SONNET_5_PROMO_END = datetime(2026, 8, 31, 23, 59, 59, tzinfo=timezone.utc)
+_ANTHROPIC_SONNET_5_PROMO_PRICING = PricingEntry(
+    input_cost_per_million=Decimal("2.00"),
+    output_cost_per_million=Decimal("10.00"),
+    cache_read_cost_per_million=Decimal("0.20"),
+    cache_write_cost_per_million=Decimal("2.50"),
+    source="official_docs_snapshot",
+    source_url="https://platform.claude.com/docs/en/about-claude/pricing",
+    pricing_version="anthropic-sonnet-5-intro-through-2026-08-31",
+)
+
+
 # Official docs snapshot entries. Models whose published pricing and cache
 # semantics are stable enough to encode exactly.
 _OFFICIAL_DOCS_PRICING: Dict[tuple[str, str], PricingEntry] = {
@@ -704,6 +716,13 @@ def resolve_billing_route(
     base_url: Optional[str] = None,
 ) -> BillingRoute:
     provider_name = (provider or "").strip().lower()
+    # Session rows created before the provider is resolved commonly contain
+    # the literal placeholder "unknown".  Treat placeholders as absent so an
+    # unambiguous model name can still select the official vendor price.  An
+    # explicit custom/local provider remains authoritative and is never
+    # guessed over.
+    if provider_name in {"unknown", "unset", "none", "n/a"}:
+        provider_name = ""
     base = (base_url or "").strip().lower()
     model = (model_name or "").strip()
     if not provider_name and "/" in model:
@@ -773,6 +792,14 @@ def _strip_date_suffix(model: str) -> str:
 
 def _lookup_official_docs_pricing(route: BillingRoute) -> Optional[PricingEntry]:
     model = route.model.lower()
+    if route.provider == "anthropic":
+        normalized = _normalize_anthropic_model_name(model)
+        base = _strip_date_suffix(normalized)
+        if (
+            base == "claude-sonnet-5"
+            and _UTC_NOW() <= _ANTHROPIC_SONNET_5_PROMO_END
+        ):
+            return _ANTHROPIC_SONNET_5_PROMO_PRICING
     # Direct lookup first
     entry = _OFFICIAL_DOCS_PRICING.get((route.provider, model))
     if entry:
